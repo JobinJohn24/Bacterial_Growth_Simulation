@@ -1,7 +1,5 @@
 # Bacterial Growth Simulation with Dosing Strategies
 
-> An R-based ODE model for simulating bacterial growth dynamics under antibiotic exposure with parameter fitting and dosing strategy optimization.
-
 ## Overview
 
 This project implements a compartmental ODE model to simulate bacterial population dynamics under antibiotic pressure. The model incorporates dose-dependent bacterial suppression and explores different dosing strategies through four systematic simulation runs.
@@ -219,25 +217,3 @@ tmax: 72                          # 72 hours instead of 48
 noise_sd: 1.0e7                   # Increase measurement noise
 ```
 
-
-## Installation & Dependencies
-
-**Required Packages:**
-- `yaml` – YAML config parsing
-- `deSolve` – ODE solver
-- `ggplot2` – Visualization
-
-**Install:**
-```r
-install.packages(c("yaml", "deSolve", "ggplot2"))
-```
-
-**Verify Installation:**
-```bash
-Rscript src/main.R
-# Should produce plots/ and results/metrics.csv without errors
-```
-
----
-
-**Last Updated:** October 25, 2025
