@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project implements a compartmental ODE model to simulate bacterial population dynamics under antibiotic pressure. The model incorporates dose-dependent bacterial suppression and explores different dosing strategies through four systematic simulation runs.
+This project sets up a compartmental ODE model. It aims to simulate the way bacterial populations shift and grow when facing antibiotic pressure. The model builds in suppression effects that depend on the dose given. It also looks into various dosing approaches by running four organized simulations.
 
 **Key Features:**
 - ODE-based bacterial growth model with antibiotic pharmacodynamics (PK/PD)
@@ -10,31 +10,6 @@ This project implements a compartmental ODE model to simulate bacterial populati
 - Parameter fitting via least-squares optimization
 - Publication-quality visualizations
 - Modular, documented R code architecture
-
----
-
-## Quick Start
-
-### Installation
-
-```bash
-# Clone repository
-git clone https://github.com/jobinjohn24/bacterial-growth-simulation.git
-cd bacterial-growth-simulation
-
-# Install dependencies in R
-install.packages(c("yaml", "deSolve", "ggplot2"))
-```
-
-### Run Simulation
-
-```bash
-Rscript src/main.R
-```
-
-**Output:** Plots in `figures/` and metrics in `results/`
-
----
 
 ## Project Structure
 
@@ -169,7 +144,26 @@ Model saturates at high doses—diminishing returns beyond 20 μg/mL.
 | estimated_EC50 | Fitted potency |
 | estimated_h | Fitted cooperativity |
 
----
+## Quick Start
+
+### Installation
+
+```bash
+# Clone repository
+git clone https://github.com/jobinjohn24/bacterial-growth-simulation.git
+cd bacterial-growth-simulation
+
+# Install dependencies in R
+install.packages(c("yaml", "deSolve", "ggplot2"))
+```
+
+### Run Simulation
+
+```bash
+Rscript src/main.R
+```
+
+**Output:** Plots in `figures/` and metrics in `results/`
 
 ## Usage
 
