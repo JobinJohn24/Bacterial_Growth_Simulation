@@ -1,0 +1,15 @@
+seed: 42
+tmax: 48
+dt: 0.1
+N0: 1000000
+r: 0.9
+K: 1000000000
+kmax: 2.0
+EC50: 2.0
+h: 1.5
+A_levels: [0, 0.1, 0.5, 1, 2, 5, 10, 20, 50]
+dose_schedule: "constant"
+pulse_interval: 12
+pulse_duration: 2
+noise_sd: 5000000
+fit_free: ["EC50","h"]
