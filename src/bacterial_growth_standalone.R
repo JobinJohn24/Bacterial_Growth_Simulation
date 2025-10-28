@@ -1,11 +1,9 @@
 #!/usr/bin/env Rscript
-# ════════════════════════════════════════════════════════════════════════════
-# Bacterial Growth Under Antibiotics - STANDALONE VERSION
-# Complete pipeline in one file (105 lines of core code)
-# Run: Rscript bacterial_growth_standalone.R
-# ════════════════════════════════════════════════════════════════════════════
+# 
+# Bacterial Growth Under Antibiotics 
+#
 
-# ── MODEL LAYER ──────────────────────────────────────────────────────────────
+#  MODEL LAYER 
 # ODE: dN/dt = r·N·(1 - N/K) - k_max · [A(t)^h / (EC50^h + A(t)^h)] · N
 dose_A <- function(t, p) {
   if (p$dose_schedule == "constant") p$A_0 
@@ -16,7 +14,7 @@ rhs <- function(t, y, p) {
   list(c(p$r * y * (1 - y / p$K) - kill * y))
 }
 
-# ── SIMULATION LAYER ─────────────────────────────────────────────────────────
+#  SIMULATION LAYER 
 simulate_curve <- function(A_level, p) {
   p$A_0 <- A_level; times <- seq(0, p$tmax, by = p$dt)
   out <- deSolve::ode(y = p$N0, times = times, func = rhs, parms = p, method = "lsoda")
@@ -26,7 +24,7 @@ make_synthetic <- function(df, p) {
   df$density <- pmax(df$density + rnorm(nrow(df), 0, p$noise_sd), 0); df
 }
 
-# ── FITTING LAYER ────────────────────────────────────────────────────────────
+# FITTING LAYER
 fit_params <- function(df, p_init, fixed_params) {
   obj <- function(theta) {
     p <- p_init; names(theta) <- names(p_init)[!(names(p_init) %in% fixed_params)]
@@ -46,7 +44,7 @@ fit_params <- function(df, p_init, fixed_params) {
   p_init[free_nms] <- result$par; p_init
 }
 
-# ── VISUALIZATION LAYER ──────────────────────────────────────────────────────
+# VISUALIZATION LAYER 
 plot_timecourses <- function(df, schedule) {
   g <- ggplot2::ggplot(df, ggplot2::aes(x = time, y = density, color = factor(concentration))) +
     ggplot2::geom_line(size = 0.7) + ggplot2::facet_wrap(~ concentration) +
@@ -66,7 +64,7 @@ plot_dose_response <- function(metrics) {
   ggplot2::ggsave("plots/dose_response.png", g, width = 7, height = 5)
 }
 
-# ── I/O LAYER ────────────────────────────────────────────────────────────────
+# I/O LAYER 
 read_params <- function(path = "sim_params.yaml") yaml::read_yaml(path)
 write_metrics <- function(metrics, path) write.csv(metrics, path, row.names = FALSE)
 maybe_load_user_data <- function(path = "data/growth.csv") 
@@ -88,10 +86,8 @@ compute_metrics <- function(df, p_fit) {
   metrics
 }
 
-# ════════════════════════════════════════════════════════════════════════════
-# ORCHESTRATION - MAIN PIPELINE
-# ════════════════════════════════════════════════════════════════════════════
-
+# Main Pipeline
+  
 # Check for required packages
 required_pkgs <- c("yaml", "deSolve", "ggplot2")
 missing_pkgs <- required_pkgs[!sapply(required_pkgs, requireNamespace, quietly = TRUE)]
@@ -156,11 +152,11 @@ write_metrics(metrics, "results/metrics.csv")
 # Print summary
 best_auc_idx <- which.min(metrics$AUC[metrics$concentration > 0])
 best_conc <- metrics$concentration[metrics$concentration > 0][best_auc_idx]
-cat("\n════════════════════════════════════════════════════════════════\n")
+cat("=\n═\n")
 cat("Best antibiotic concentration:", best_conc, "μg/mL (AUC:", 
     sprintf("%.2e", metrics$AUC[metrics$concentration == best_conc]), ")\n")
 cat("Estimated EC50:", sprintf("%.2f", p_fit$EC50), "μg/mL; Hill:", 
     sprintf("%.2f", p_fit$h), "\n")
 cat("Results saved to results/metrics.csv\n")
 cat("Plots saved to plots/\n")
-cat("════════════════════════════════════════════════════════════════\n\n")
+cat("═\n=\n")
