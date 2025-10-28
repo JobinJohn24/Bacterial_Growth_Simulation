@@ -131,7 +131,7 @@ Model saturates at high doses—diminishing returns beyond 20 μg/mL.
 
 ### Dose-Response Curves
 - **X-axis:** Antibiotic concentration (μg/mL)
-- **Y-axis:** AUC (area under curve—total bacterial burden)
+- **Y-axis:** AUC (area under curve — cumulative bacterial exposure )
 - **Red line:** EC50 mark (half-maximal effect)
 - **Sigmoid curve:** S-shaped dose-response
 
