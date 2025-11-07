@@ -210,5 +210,3 @@ tmax: 72                          # 72 hours instead of 48
 ```yaml
 noise_sd: 1.0e7                   # Increase measurement noise
 ```
-
-```MIT```
