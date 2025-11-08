@@ -1,6 +1,6 @@
-# Bacterial Growth Simulation with Dosing Strategies
+# 🦠 Bacterial Growth Simulation with Dosing Strategies 🦠
 
-## Overview
+## 📋 Overview
 
 This project sets up a compartmental ODE model. It aims to simulate the way bacterial populations shift and grow when facing antibiotic pressure. The model builds in suppression effects that depend on the dose given. It also looks into various dosing approaches by running four organized simulations.
 
@@ -11,7 +11,7 @@ This project sets up a compartmental ODE model. It aims to simulate the way bact
 - Publication-quality visualizations
 - Modular, documented R code architecture
 
-## Project Structure
+##🛠️ Project Structure
 
 ```
 .
@@ -32,7 +32,7 @@ This project sets up a compartmental ODE model. It aims to simulate the way bact
 
 ---
 
-## The Model
+## 📋 The Model
 
 **ODE Equation:**
 ```
@@ -67,7 +67,7 @@ dN/dt = r·N·(1 - N/K) - k_max · [A(t)^h / (EC50^h + A(t)^h)] · N
 
 ---
 
-## Run Descriptions
+## 🏃‍♂️ Run Descriptions
 
 ### **Run 1: Baseline Analysis**
 **Configuration:** Constant dosing [0–20 μg/mL], both parameters fitted
@@ -121,7 +121,7 @@ Model saturates at high doses—diminishing returns beyond 20 μg/mL.
 
 ---
 
-## Understanding Outputs
+##📊 Understanding Outputs
 
 ### Time-Course Plots
 - **X-axis:** Time (hours)
@@ -144,7 +144,7 @@ Model saturates at high doses—diminishing returns beyond 20 μg/mL.
 | estimated_EC50 | Fitted potency |
 | estimated_h | Fitted cooperativity |
 
-## Quick Start
+## 👨‍💻 Quick Start
 
 ### Installation
 
@@ -189,7 +189,7 @@ Place CSV in `data/growth.csv` with columns:
 time, concentration, density
 ```
 
-## Customization
+## 👨‍🔬 Customization
 
 ### Fit Different Parameters
 
