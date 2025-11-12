@@ -121,7 +121,7 @@ Model saturates at high doses—diminishing returns beyond 20 μg/mL.
 
 ---
 
-##📊 Understanding Outputs
+## 📊 Understanding Outputs
 
 ### Time-Course Plots
 - **X-axis:** Time (hours)
