@@ -11,7 +11,7 @@ This project sets up a compartmental ODE model. It aims to simulate the way bact
 - Publication-quality visualizations
 - Modular, documented R code architecture
 
-##🛠️ Project Structure
+## 🛠️ Project Structure
 
 ```
 .
