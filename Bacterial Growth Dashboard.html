@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bacterial Growth Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{height:100%;overflow:hidden;font-family:'IBM Plex Sans',sans-serif}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:rgba(8,145,178,.3);border-radius:3px}
+input[type=range]{-webkit-appearance:none;height:4px;border-radius:2px;outline:none;cursor:pointer;width:100%;
+  background:linear-gradient(to right,var(--fc) var(--pct,50%),var(--tc) var(--pct,50%))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;
+  background:var(--fc);box-shadow:0 0 0 3px color-mix(in srgb,var(--fc) 25%,transparent);cursor:pointer}
+.panel{display:flex;flex-direction:column;border-radius:8px;overflow:hidden}
+.ph{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;flex-shrink:0}
+.pb{flex:1;min-height:0;padding:4px 8px 8px}
+</style>
+<template id="__bundler_thumbnail" data-bg-color="#080f1e">
+  <svg viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg">
+    <rect width="120" height="80" fill="#080f1e"/>
+    <rect x="6" y="6" width="50" height="32" rx="3" fill="#0f2040" stroke="#1e3a5f" stroke-width="0.5"/>
+    <polyline points="10,34 18,24 26,28 34,18 42,20 50,14" fill="none" stroke="#22d3ee" stroke-width="1.5"/>
+    <polyline points="10,34 18,32 26,30 34,28 42,26 50,26" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="2 1"/>
+    <rect x="64" y="6" width="50" height="32" rx="3" fill="#0f2040" stroke="#1e3a5f" stroke-width="0.5"/>
+    <path d="M68,34 Q75,34 82,28 Q89,18 96,16 Q103,15 114,15" fill="none" stroke="#22d3ee" stroke-width="1.5"/>
+    <line x1="84" y1="6" x2="84" y2="38" stroke="#f59e0b" stroke-width="1" stroke-dasharray="2 1"/>
+    <rect x="6" y="44" width="50" height="30" rx="3" fill="#0a1628" stroke="#1e3a5f" stroke-width="0.5"/>
+    <circle cx="18" cy="55" r="3" fill="#22d3ee" opacity="0.8"/>
+    <circle cx="28" cy="60" r="2" fill="#22d3ee" opacity="0.7"/>
+    <circle cx="38" cy="52" r="3.5" fill="#22d3ee" opacity="0.9"/>
+    <circle cx="46" cy="58" r="2" fill="#22d3ee" opacity="0.6"/>
+    <circle cx="22" cy="65" r="2.5" fill="#22d3ee" opacity="0.7"/>
+    <rect x="64" y="44" width="50" height="30" rx="3" fill="#0f2040" stroke="#1e3a5f" stroke-width="0.5"/>
+    <rect x="68" y="54" width="8" height="16" rx="1.5" fill="#0891b2" opacity="0.85"/>
+    <rect x="80" y="58" width="8" height="12" rx="1.5" fill="#0f766e" opacity="0.85"/>
+    <rect x="92" y="62" width="8" height="8" rx="1.5" fill="#7c3aed" opacity="0.85"/>
+    <rect x="104" y="60" width="8" height="10" rx="1.5" fill="#b45309" opacity="0.85"/>
+    <text x="60" y="78" text-anchor="middle" font-size="4" fill="#94a3b8" font-family="monospace">Bacterial Growth Simulator</text>
+  </svg>
+</template>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+// ── ODE SOLVER ────────────────────────────────────────────────────
+function getDose(t, A, schedule, pulseInterval, pulseDuration) {
+  if (schedule === 'constant') return A;
+  return (t % pulseInterval) < pulseDuration ? A : 0;
+}
+function odeRHS(N, t, p) {
+  const At = getDose(t, p.A, p.schedule, p.pulseInterval, p.pulseDuration);
+  const growth = p.r * N * (1 - N / p.K);
+  if (At <= 0) return growth;
+  const kill = p.kmax * Math.pow(At, p.h) / (Math.pow(p.EC50, p.h) + Math.pow(At, p.h));
+  return growth - kill * N;
+}
+function rk4Step(N, t, dt, p) {
+  const k1 = odeRHS(N, t, p);
+  const k2 = odeRHS(N + dt/2*k1, t + dt/2, p);
+  const k3 = odeRHS(N + dt/2*k2, t + dt/2, p);
+  const k4 = odeRHS(N + dt*k3, t + dt, p);
+  return Math.max(0, N + (dt/6)*(k1+2*k2+2*k3+k4));
+}
+function runSim(params) {
+  const { tmax=48, dt=0.2, N0=1e6 } = params;
+  const steps = Math.round(tmax/dt);
+  const times = new Array(steps+1), densities = new Array(steps+1);
+  let N = N0;
+  for (let i = 0; i <= steps; i++) {
+    times[i] = i*dt; densities[i] = N;
+    if (i < steps) N = rk4Step(N, i*dt, dt, params);
+  }
+  return { times, densities };
+}
+function computeAUC(densities, dt) {
+  let auc = 0;
+  for (let i = 0; i < densities.length-1; i++) auc += (densities[i]+densities[i+1])/2*dt;
+  return auc;
+}
+function computeDoseResponse(baseParams, concentrations) {
+  return concentrations.map(A => {
+    const { densities } = runSim({...baseParams, A});
+    return { A, auc: computeAUC(densities, baseParams.dt||0.2), maxDensity: Math.max(...densities) };
+  });
+}
+
+// ── BACTERIA ANIMATION ───────────────────────────────────────────
+function superscript(n) {
+  const map = {'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹','-':'⁻'};
+  return String(n).split('').map(c => map[c]||c).join('');
+}
+function BacteriaAnimation({ densities, times, playing, A, schedule, theme }) {
+  const canvasRef = React.useRef(null);
+  const stateRef = React.useRef({ bacteria:[], ab_particles:[], frame:0 });
+  const rafRef = React.useRef(null);
+  const colors = theme === 'dark'
+    ? { bg:'#0a1628', cell:'#22d3ee', glow:'rgba(34,211,238,0.18)', text:'#94a3b8' }
+    : { bg:'#f0f9ff', cell:'#0891b2', glow:'rgba(8,145,178,0.13)', text:'#64748b' };
+
+  const getNAtTime = React.useCallback((tIdx) => {
+    if (!densities?.length) return 1e6;
+    return densities[Math.min(Math.max(0, Math.round(tIdx)), densities.length-1)];
+  }, [densities]);
+
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width  = (canvas.offsetWidth  || 400) * dpr;
+    canvas.height = (canvas.offsetHeight || 220) * dpr;
+    ctx.scale(dpr, dpr);
+    const w = canvas.offsetWidth || 400;
+    const h = canvas.offsetHeight || 220;
+
+    const state = stateRef.current;
+    const mkB = () => ({ x:Math.random()*w, y:Math.random()*h, vx:(Math.random()-.5)*.3, vy:(Math.random()-.5)*.3, r:3+Math.random()*2.5, phase:Math.random()*Math.PI*2, opacity:.7+Math.random()*.3 });
+    const mkAB = () => ({ x:Math.random()*w, y:-10, vy:.8+Math.random()*1.2, vx:(Math.random()-.5)*.5, r:2+Math.random()*1.5, opacity:.7, life:1 });
+    if (!state.bacteria.length) for (let i=0;i<40;i++) state.bacteria.push(mkB());
+
+    let simTime = 0, lastStamp = null;
+    function draw(stamp) {
+      if (!lastStamp) lastStamp = stamp;
+      const elapsed = (stamp - lastStamp)/1000; lastStamp = stamp;
+      if (playing) simTime = Math.min(simTime + elapsed*4, times?.[times.length-1]||48);
+      state.frame++;
+      const tIdx = times ? times.findIndex(t => t >= simTime) : 0;
+      const N = getNAtTime(tIdx < 0 ? (times?.length-1||0) : tIdx);
+      const frac = Math.max(0, Math.min(1, N/1e9));
+      const target = Math.round(2 + frac*118);
+      const hasAb = A > 0 && (schedule==='constant' || getDose(simTime,A,schedule,12,2)>0);
+      while (state.bacteria.length < target) state.bacteria.push(mkB());
+      while (state.bacteria.length > target) state.bacteria.pop();
+      if (hasAb && Math.random()<.3 && state.ab_particles.length<30) state.ab_particles.push(mkAB());
+
+      ctx.clearRect(0,0,w,h);
+      ctx.fillStyle = colors.bg; ctx.fillRect(0,0,w,h);
+      ctx.strokeStyle = theme==='dark'?'rgba(255,255,255,0.03)':'rgba(0,0,0,0.03)';
+      ctx.lineWidth = 1;
+      for (let gx=0;gx<w;gx+=30){ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,h);ctx.stroke();}
+      for (let gy=0;gy<h;gy+=30){ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(w,gy);ctx.stroke();}
+
+      state.ab_particles = state.ab_particles.filter(p=>p.life>0);
+      state.ab_particles.forEach(p=>{
+        p.y+=p.vy;p.x+=p.vx;p.life-=.008;
+        ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+        ctx.fillStyle=`rgba(245,158,11,${p.opacity*p.life})`;ctx.fill();
+      });
+      state.bacteria.forEach(b=>{
+        b.x+=b.vx;b.y+=b.vy;b.phase+=.04;
+        if(b.x<-10)b.x=w+10;if(b.x>w+10)b.x=-10;if(b.y<-10)b.y=h+10;if(b.y>h+10)b.y=-10;
+        const r = b.r*(1+.08*Math.sin(b.phase));
+        const g=ctx.createRadialGradient(b.x,b.y,0,b.x,b.y,r*3);
+        g.addColorStop(0,colors.glow);g.addColorStop(1,'transparent');
+        ctx.beginPath();ctx.arc(b.x,b.y,r*3,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+        ctx.save();ctx.translate(b.x,b.y);ctx.rotate(b.phase*.2);
+        ctx.beginPath();ctx.ellipse(0,0,r*1.6,r,0,0,Math.PI*2);
+        ctx.fillStyle=hasAb?`rgba(245,158,11,${b.opacity*.6})`:colors.cell;
+        ctx.fill();ctx.restore();
+      });
+      const Nfmt = N>=1e9?'≥1×10⁹':N<1?'0':`${(N/Math.pow(10,Math.floor(Math.log10(N)))).toFixed(1)}×10${superscript(Math.floor(Math.log10(Math.max(1,N))))}`;
+      ctx.fillStyle=colors.text;ctx.font="12px 'IBM Plex Mono',monospace";
+      ctx.fillText(`N ≈ ${Nfmt}`,10,h-28);ctx.fillText(`t = ${simTime.toFixed(1)}h`,10,h-12);
+      if(hasAb){ctx.fillStyle='#f59e0b';ctx.fillText(`[AB] = ${A} μg/mL`,w-130,h-12);}
+      rafRef.current = requestAnimationFrame(draw);
+    }
+    rafRef.current = requestAnimationFrame(draw);
+    return () => { cancelAnimationFrame(rafRef.current); lastStamp=null; };
+  }, [densities, playing, A, schedule, theme, getNAtTime]);
+
+  return React.createElement('canvas', { ref:canvasRef, style:{width:'100%',height:'100%',borderRadius:4,display:'block'} });
+}
+
+// ── CHART UTILS ───────────────────────────────────────────────────
+function niceLinearTicks(min, max, n=5) {
+  const range = max - min || 1;
+  const rawStep = range / n;
+  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const norm = rawStep / mag;
+  const niceVal = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+  const step = niceVal * mag;
+  const start = Math.ceil(min / step) * step;
+  const ticks = [];
+  for (let v = start; v <= max + step*0.01; v += step) ticks.push(+v.toFixed(10));
+  return ticks;
+}
+
+function SvgLineChart({ data, series, xKey, xLabel, yLabel, refLines=[], isDark }) {
+  const containerRef = React.useRef(null);
+  const [w, setW] = React.useState(400);
+  const [tooltip, setTooltip] = React.useState(null);
+  const H = 210, pad = { top:12, right:18, bottom:38, left:50 };
+
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(e => setW(e[0].contentRect.width||400));
+    obs.observe(el); setW(el.offsetWidth||400);
+    return () => obs.disconnect();
+  }, []);
+
+  const plotW = w - pad.left - pad.right;
+  const plotH = H - pad.top - pad.bottom;
+  const allX = data.map(d => d[xKey]);
+  const allY = series.flatMap(s => data.map(d => d[s.key]).filter(v => v!=null&&isFinite(v)));
+  if (!allY.length || !data.length) return <div ref={containerRef} style={{width:'100%',height:H}} />;
+
+  const xDom = [Math.min(...allX), Math.max(...allX)];
+  const yMin = Math.min(...allY), yMax = Math.max(...allY);
+  const yp = (yMax-yMin)*0.08||0.5;
+  const yDom = [yMin-yp, yMax+yp];
+  const xs = v => pad.left + (v-xDom[0])/(xDom[1]-xDom[0])*plotW;
+  const ys = v => pad.top + plotH - (v-yDom[0])/(yDom[1]-yDom[0])*plotH;
+  const xTicks = niceLinearTicks(xDom[0], xDom[1], 6);
+  const yTicks = niceLinearTicks(yDom[0], yDom[1], 5);
+  const ax = isDark?'#94a3b8':'#64748b';
+  const gr = isDark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.05)';
+  const textClr = isDark?'#e0f2fe':'#0c4a6e';
+  const ttBg = isDark?'#0f2040':'#fff';
+  const ttBd = isDark?'#1e3a5f':'#e0f2fe';
+  const uid = React.useMemo(()=>'c'+Math.random().toString(36).slice(2),[]);
+
+  function onMM(e) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    if (mx < pad.left-5 || mx > w-pad.right+5) { setTooltip(null); return; }
+    const xv = xDom[0] + (mx-pad.left)/plotW*(xDom[1]-xDom[0]);
+    const idx = data.reduce((b,d,i) => Math.abs(d[xKey]-xv)<Math.abs(data[b][xKey]-xv)?i:b, 0);
+    setTooltip({ mx, idx });
+  }
+
+  const ttPt = tooltip ? data[tooltip.idx] : null;
+
+  return (
+    <div ref={containerRef} style={{width:'100%'}}>
+      <svg width={w} height={H} onMouseMove={onMM} onMouseLeave={()=>setTooltip(null)} style={{display:'block',overflow:'visible'}}>
+        <defs><clipPath id={uid}><rect x={pad.left} y={pad.top} width={plotW} height={plotH}/></clipPath></defs>
+        {yTicks.map(t=><line key={t} x1={pad.left} x2={w-pad.right} y1={ys(t)} y2={ys(t)} stroke={gr}/>)}
+        {xTicks.map(t=><line key={t} x1={xs(t)} x2={xs(t)} y1={pad.top} y2={H-pad.bottom} stroke={gr}/>)}
+        <line x1={pad.left} x2={pad.left} y1={pad.top} y2={H-pad.bottom} stroke={ax}/>
+        <line x1={pad.left} x2={w-pad.right} y1={H-pad.bottom} y2={H-pad.bottom} stroke={ax}/>
+        {xTicks.map(t=><g key={t}>
+          <line x1={xs(t)} x2={xs(t)} y1={H-pad.bottom} y2={H-pad.bottom+4} stroke={ax}/>
+          <text x={xs(t)} y={H-pad.bottom+15} fill={ax} fontSize={10} textAnchor="middle">{+t.toFixed(1)}</text>
+        </g>)}
+        {yTicks.map(t=><text key={t} x={pad.left-7} y={ys(t)+4} fill={ax} fontSize={10} textAnchor="end">{+t.toFixed(2)}</text>)}
+        <text x={pad.left+plotW/2} y={H-2} fill={ax} fontSize={11} textAnchor="middle">{xLabel}</text>
+        <text x={11} y={pad.top+plotH/2} fill={ax} fontSize={11} textAnchor="middle" transform={`rotate(-90,11,${pad.top+plotH/2})`}>{yLabel}</text>
+        {refLines.map((r,i)=>r.x!=null&&isFinite(xs(r.x))?<g key={i}>
+          <line x1={xs(r.x)} x2={xs(r.x)} y1={pad.top} y2={H-pad.bottom} stroke={r.color} strokeWidth={1.5} strokeDasharray="5 3" clipPath={`url(#${uid})`}/>
+          <text x={xs(r.x)+3} y={pad.top+11} fill={r.color} fontSize={10} fontWeight={600}>{r.label}</text>
+        </g>:null)}
+        {series.map(s=>{
+          const pts = data.filter(d=>d[s.key]!=null&&isFinite(d[s.key]));
+          if(!pts.length) return null;
+          const d = pts.map((p,i)=>`${i===0?'M':'L'}${xs(p[xKey]).toFixed(1)},${ys(p[s.key]).toFixed(1)}`).join('');
+          return <path key={s.key} d={d} fill="none" stroke={s.color} strokeWidth={s.w||1.8} strokeDasharray={s.dash} clipPath={`url(#${uid})`}/>;
+        })}
+        {ttPt&&(()=>{
+          const tx2=xs(ttPt[xKey]);
+          const vs=series.filter(s=>ttPt[s.key]!=null&&isFinite(ttPt[s.key]));
+          const lines=[`t = ${ttPt[xKey]}h`,...vs.map(s=>`${s.label}: ${ttPt[s.key].toFixed(2)}`)];
+          const tw2=148, th2=lines.length*15+12;
+          const tlx=tx2+tw2+12>w?tx2-tw2-8:tx2+8;
+          const tly=Math.max(pad.top,Math.min(H-pad.bottom-th2,ys(ttPt[vs[0]?.key]||5)-th2/2));
+          return <g>
+            <line x1={tx2} x2={tx2} y1={pad.top} y2={H-pad.bottom} stroke={ax} strokeWidth={1} strokeDasharray="3 2"/>
+            {vs.map(s=><circle key={s.key} cx={tx2} cy={ys(ttPt[s.key])} r={3} fill={s.color}/>)}
+            <rect x={tlx} y={tly} width={tw2} height={th2} rx={4} fill={ttBg} stroke={ttBd} strokeWidth={1}/>
+            {lines.map((l,i)=><text key={i} x={tlx+8} y={tly+13+i*15} fill={i===0?textClr:(vs[i-1]?.color||ax)} fontSize={10} fontWeight={i===0?600:400} fontFamily="IBM Plex Mono,monospace">{l}</text>)}
+          </g>;
+        })()}
+      </svg>
+    </div>
+  );
+}
+
+function SvgBarChart({ data, xKey, yKey, colorKey, xLabel, yLabel, isDark }) {
+  const containerRef = React.useRef(null);
+  const [w, setW] = React.useState(400);
+  const H = 195, pad = { top:16, right:18, bottom:38, left:52 };
+  React.useEffect(()=>{
+    const el=containerRef.current;if(!el)return;
+    const obs=new ResizeObserver(e=>setW(e[0].contentRect.width||400));
+    obs.observe(el);setW(el.offsetWidth||400);return()=>obs.disconnect();
+  },[]);
+  const plotW=w-pad.left-pad.right, plotH=H-pad.top-pad.bottom;
+  const yMax=Math.max(...data.map(d=>d[yKey]))*1.18;
+  const ys=v=>pad.top+plotH-v/yMax*plotH;
+  const bw=plotW/data.length*0.55;
+  const ax=isDark?'#94a3b8':'#64748b';
+  const gr=isDark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.05)';
+  const yTicks=[0,.25,.5,.75,1].map(f=>+(f*yMax).toFixed(1));
+  return (
+    <div ref={containerRef} style={{width:'100%'}}>
+      <svg width={w} height={H} style={{display:'block'}}>
+        {yTicks.map(t=><line key={t} x1={pad.left} x2={w-pad.right} y1={ys(t)} y2={ys(t)} stroke={gr}/>)}
+        <line x1={pad.left} x2={pad.left} y1={pad.top} y2={H-pad.bottom} stroke={ax}/>
+        <line x1={pad.left} x2={w-pad.right} y1={H-pad.bottom} y2={H-pad.bottom} stroke={ax}/>
+        {yTicks.map(t=><text key={t} x={pad.left-7} y={ys(t)+4} fill={ax} fontSize={10} textAnchor="end">{t}</text>)}
+        {data.map((d,i)=>{
+          const bx=pad.left+i*(plotW/data.length)+(plotW/data.length-bw)/2;
+          const by=ys(d[yKey]),bh=H-pad.bottom-by;
+          return <g key={i}>
+            <rect x={bx} y={by} width={bw} height={bh} fill={d[colorKey]} fillOpacity={.85} rx={3}/>
+            <text x={bx+bw/2} y={H-pad.bottom+14} fill={ax} fontSize={11} textAnchor="middle" fontWeight={500}>{d[xKey]}</text>
+            <text x={bx+bw/2} y={by-5} fill={d[colorKey]} fontSize={10} textAnchor="middle" fontFamily="monospace">{d[yKey].toFixed(1)}</text>
+          </g>;
+        })}
+        <text x={pad.left+plotW/2} y={H-2} fill={ax} fontSize={11} textAnchor="middle">{xLabel}</text>
+        <text x={11} y={pad.top+plotH/2} fill={ax} fontSize={11} textAnchor="middle" transform={`rotate(-90,11,${pad.top+plotH/2})`}>{yLabel}</text>
+      </svg>
+    </div>
+  );
+}
+
+// ── CONSTANTS ─────────────────────────────────────────────────────
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "dark",
+  "chartStyle": "lines",
+  "showEC50Line": false
+}/*EDITMODE-END*/;
+const DR_CONCS = [0,.1,.25,.5,.75,1,1.5,2,2.5,3,4,5,6,8,10,12,15,20,25,30,40,50];
+const PRESET_CONCS = [0,1,5,10,20];
+const CC_L = ['#94a3b8','#67e8f9','#22d3ee','#0891b2','#0e7490'];
+const CC_D = ['#475569','#a5f3fc','#22d3ee','#67e8f9','#cffafe'];
+const RUN_DATA = [
+  { run:1,label:'Run 1',mode:'Constant',      range:'0–20',ec50:2.43,h:1.17,bestConc:20,minAUC:1.06e6, finding:'Baseline reference',  color:'#0891b2', params:{r:.9,K:1e9,kmax:2,EC50:2.43,h:1.17,schedule:'constant',pulseInterval:12,pulseDuration:2,A:20,tmax:48,dt:.2,N0:1e6}},
+  { run:2,label:'Run 2',mode:'Pulse 12h/2h', range:'0–20',ec50:2.43,h:1.17,bestConc:20,minAUC:1.06e6, finding:'Clinical relevance',  color:'#0f766e', params:{r:.9,K:1e9,kmax:2,EC50:2.43,h:1.17,schedule:'pulse',pulseInterval:12,pulseDuration:2,A:20,tmax:48,dt:.2,N0:1e6}},
+  { run:3,label:'Run 3',mode:'Const (h=1.5)',range:'0–20',ec50:2.00,h:1.50,bestConc:20,minAUC:9.63e5, finding:'Parameter sensitivity',color:'#7c3aed', params:{r:.9,K:1e9,kmax:2,EC50:2.00,h:1.50,schedule:'constant',pulseInterval:12,pulseDuration:2,A:20,tmax:48,dt:.2,N0:1e6}},
+  { run:4,label:'Run 4',mode:'Constant',      range:'0–50',ec50:2.00,h:1.50,bestConc:50,minAUC:9.23e5, finding:'Saturation effects', color:'#b45309', params:{r:.9,K:1e9,kmax:2,EC50:2.00,h:1.50,schedule:'constant',pulseInterval:12,pulseDuration:2,A:50,tmax:48,dt:.2,N0:1e6}},
+];
+function fmtSci(n){if(!n||isNaN(n))return'—';const e=Math.floor(Math.log10(Math.abs(n)));return`${(n/Math.pow(10,e)).toFixed(2)}×10^${e}`;}
+
+// ── PANELS ────────────────────────────────────────────────────────
+function TimeCoursePanel({ simMap, params, isDark }) {
+  const colors = isDark ? CC_D : CC_L;
+  const chartData = React.useMemo(()=>{
+    const keys=Object.keys(simMap);if(!keys.length)return[];
+    const {times}=simMap[keys[0]];
+    const step=Math.max(1,Math.ceil(times.length/200));
+    return times.filter((_,i)=>i%step===0).map((_,si)=>{
+      const idx=si*step;
+      const pt={t:+times[idx].toFixed(1)};
+      keys.forEach(k=>{const d=simMap[k].densities[idx]||0;pt[k]=d>0?+Math.log10(d).toFixed(3):0;});
+      return pt;
+    });
+  },[simMap]);
+  const series=PRESET_CONCS.map((c,i)=>({key:`${c} μg/mL`,label:`${c} μg/mL`,color:colors[i],w:1.8,dash:c===0?'4 3':undefined}));
+  if(!PRESET_CONCS.includes(params.A)) series.push({key:`${params.A} μg/mL`,label:`${params.A} μg/mL`,color:'#f59e0b',w:2.5});
+  return <SvgLineChart data={chartData} series={series} xKey="t" xLabel="Time (hours)" yLabel="log₁₀(N)" isDark={isDark}/>;
+}
+
+function DoseResponsePanel({ drData, params, isDark }) {
+  const chartData=React.useMemo(()=>drData.map(d=>({A:+d.A.toFixed(3),logAUC:d.auc>0?+Math.log10(d.auc).toFixed(3):0})),[drData]);
+  const primary=isDark?'#22d3ee':'#0891b2';
+  return <SvgLineChart data={chartData} series={[{key:'logAUC',label:'log₁₀(AUC)',color:primary,w:2.5}]}
+    xKey="A" xLabel="[Antibiotic] μg/mL" yLabel="log₁₀(AUC)"
+    refLines={[{x:params.EC50,color:'#f59e0b',label:`EC₅₀=${params.EC50}`}]} isDark={isDark}/>;
+}
+
+function MetricsPanel({ isDark, onLoad }) {
+  const bg=isDark?'#0f2040':'#fff', text=isDark?'#e0f2fe':'#0c4a6e', muted=isDark?'#94a3b8':'#64748b', border=isDark?'#1e3a5f':'#e0f2fe';
+  const [hov,setHov]=React.useState(null);
+  const cols=[{k:'label',l:'Run'},{k:'mode',l:'Dosing'},{k:'ec50',l:'EC₅₀',f:v=>v.toFixed(2)+' μg/mL'},{k:'h',l:'Hill h',f:v=>v.toFixed(2)},{k:'bestConc',l:'Best [AB]',f:v=>v+' μg/mL'},{k:'minAUC',l:'Min AUC',f:fmtSci},{k:'finding',l:'Finding'}];
+  return (
+    <div style={{width:'100%',height:'100%',overflowY:'auto'}}>
+      <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+        <thead><tr style={{background:isDark?'#162035':'#f0f9ff'}}>
+          {cols.map(c=><th key={c.k} style={{padding:'7px 9px',textAlign:'left',color:muted,fontWeight:600,fontSize:10,letterSpacing:'0.05em',textTransform:'uppercase',borderBottom:`1px solid ${border}`,whiteSpace:'nowrap'}}>{c.l}</th>)}
+          <th style={{padding:'7px 9px',borderBottom:`1px solid ${border}`}}/>
+        </tr></thead>
+        <tbody>{RUN_DATA.map((row,i)=>(
+          <tr key={i} style={{background:hov===i?(isDark?'#162035':'#f0f9ff'):bg,cursor:'pointer'}}
+            onMouseEnter={()=>setHov(i)} onMouseLeave={()=>setHov(null)}>
+            {cols.map(c=><td key={c.k} style={{padding:'9px',borderBottom:`1px solid ${border}`,color:c.k==='label'?row.color:text,fontWeight:c.k==='label'?700:400,whiteSpace:c.k==='finding'?'normal':'nowrap',fontFamily:['ec50','h','minAUC'].includes(c.k)?'IBM Plex Mono,monospace':'inherit',fontSize:c.k==='finding'?11:12}}>{c.f?c.f(row[c.k]):row[c.k]}</td>)}
+            <td style={{padding:'9px',borderBottom:`1px solid ${border}`}}>
+              <button onClick={()=>onLoad(row.params)} style={{padding:'3px 7px',fontSize:10,borderRadius:4,cursor:'pointer',border:`1px solid ${row.color}`,color:row.color,background:'transparent',fontWeight:700,letterSpacing:'0.04em'}}>LOAD</button>
+            </td>
+          </tr>
+        ))}</tbody>
+      </table>
+      <div style={{padding:'10px',fontSize:11,color:muted}}>Click <strong style={{color:text}}>LOAD</strong> to apply run parameters. Lower AUC = better bacterial suppression.</div>
+    </div>
+  );
+}
+
+function RunComparisonChart({ isDark }) {
+  const barData=React.useMemo(()=>RUN_DATA.map(r=>{
+    const {densities}=runSim({...r.params,dt:.2});
+    return {name:r.label,logAUC:+Math.log10(Math.max(1,computeAUC(densities,.2))).toFixed(2),color:r.color};
+  }),[]);
+  return <SvgBarChart data={barData} xKey="name" yKey="logAUC" colorKey="color" xLabel="Run" yLabel="log₁₀(AUC)" isDark={isDark}/>;
+}
+
+// ── SLIDER ────────────────────────────────────────────────────────
+function Slider({ label, value, min, max, step, unit, onChange, isDark }) {
+  const pct=((value-min)/(max-min)*100).toFixed(1)+'%';
+  const fc=isDark?'#22d3ee':'#0891b2', tc=isDark?'#1e3a5f':'#dbeafe';
+  const disp=value>=1e9?'1×10⁹':value>=1e6?value.toExponential(1):+value.toFixed(3);
+  return (
+    <div style={{marginBottom:13}}>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+        <span style={{fontSize:11.5,fontWeight:500,color:isDark?'#94a3b8':'#64748b'}}>{label}</span>
+        <span style={{fontFamily:'IBM Plex Mono',fontSize:11.5,fontWeight:500,color:fc}}>{disp}{unit}</span>
+      </div>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={e=>onChange(+e.target.value)} style={{'--fc':fc,'--tc':tc,'--pct':pct}}/>
+    </div>
+  );
+}
+
+// ── SIDEBAR ───────────────────────────────────────────────────────
+function Sidebar({ params, setParams, isDark }) {
+  const border=isDark?'#1e3a5f':'#e0f2fe', accent=isDark?'#22d3ee':'#0891b2', muted=isDark?'#94a3b8':'#64748b', text=isDark?'#e0f2fe':'#0c4a6e';
+  const set=k=>v=>setParams(p=>({...p,[k]:v}));
+  const S={background:isDark?'rgba(34,211,238,.05)':'rgba(8,145,178,.04)',borderRadius:6,padding:'10px',marginBottom:12,border:`1px solid ${border}`};
+  const SH={fontSize:10,fontWeight:700,letterSpacing:'.1em',color:accent,textTransform:'uppercase',marginBottom:10};
+  return (
+    <div style={{width:244,flexShrink:0,background:isDark?'#0c1e38':'#fff',borderRight:`1px solid ${border}`,overflowY:'auto',padding:'14px 12px'}}>
+      <div style={{fontSize:10,fontWeight:700,letterSpacing:'.1em',color:muted,textTransform:'uppercase',marginBottom:14}}>Model Parameters</div>
+      <div style={S}><div style={SH}>Growth</div>
+        <Slider label="Growth rate r" value={params.r} min={.1} max={2} step={.05} unit=" hr⁻¹" onChange={set('r')} isDark={isDark}/>
+        <Slider label="Carrying cap K" value={params.K} min={1e7} max={1e10} step={1e7} unit="" onChange={set('K')} isDark={isDark}/>
+        <Slider label="N₀ initial" value={params.N0} min={1e4} max={1e8} step={5e4} unit="" onChange={set('N0')} isDark={isDark}/>
+      </div>
+      <div style={S}><div style={SH}>Pharmacodynamics</div>
+        <Slider label="Max kill rate kmax" value={params.kmax} min={.5} max={6} step={.1} unit=" hr⁻¹" onChange={set('kmax')} isDark={isDark}/>
+        <Slider label="EC₅₀" value={params.EC50} min={.1} max={10} step={.1} unit=" μg/mL" onChange={set('EC50')} isDark={isDark}/>
+        <Slider label="Hill coeff h" value={params.h} min={.5} max={4} step={.1} unit="" onChange={set('h')} isDark={isDark}/>
+      </div>
+      <div style={S}><div style={SH}>Dosing</div>
+        <Slider label="[Antibiotic] A" value={params.A} min={0} max={50} step={.5} unit=" μg/mL" onChange={set('A')} isDark={isDark}/>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:11.5,fontWeight:500,color:muted,marginBottom:6}}>Schedule</div>
+          <div style={{display:'flex',gap:5}}>
+            {['constant','pulse'].map(s=><button key={s} onClick={()=>setParams(p=>({...p,schedule:s}))} style={{flex:1,padding:'5px 0',border:`1px solid ${params.schedule===s?accent:border}`,borderRadius:4,background:params.schedule===s?(isDark?'rgba(34,211,238,.12)':'rgba(8,145,178,.1)'):'transparent',color:params.schedule===s?accent:muted,fontSize:10.5,fontWeight:600,letterSpacing:'.05em',cursor:'pointer',textTransform:'uppercase'}}>{s}</button>)}
+          </div>
+        </div>
+        {params.schedule==='pulse'&&<>
+          <Slider label="Pulse interval" value={params.pulseInterval} min={2} max={24} step={1} unit="h" onChange={set('pulseInterval')} isDark={isDark}/>
+          <Slider label="Pulse duration" value={params.pulseDuration} min={.5} max={6} step={.5} unit="h" onChange={set('pulseDuration')} isDark={isDark}/>
+        </>}
+      </div>
+      <div style={S}><div style={SH}>Simulation</div>
+        <Slider label="Duration tmax" value={params.tmax} min={12} max={96} step={4} unit="h" onChange={set('tmax')} isDark={isDark}/>
+      </div>
+      <div style={{padding:'10px',background:isDark?'rgba(255,255,255,.02)':'rgba(8,145,178,.04)',borderRadius:6,border:`1px dashed ${border}`,fontSize:11,color:muted,lineHeight:1.7}}>
+        <strong style={{color:text}}>ODE Model</strong><br/>
+        dN/dt = r·N·(1−N/K)<br/>
+        &nbsp;&nbsp;− k<sub>max</sub>·[A<sup>h</sup>/(EC₅₀<sup>h</sup>+A<sup>h</sup>)]·N
+      </div>
+    </div>
+  );
+}
+
+// ── PANEL WRAPPER ─────────────────────────────────────────────────
+function Panel({ title, badge, badgeColor, extra, isDark, children }) {
+  const bg=isDark?'#0f2040':'#fff', border=isDark?'#1e3a5f':'#e8f4f8', text=isDark?'#e0f2fe':'#0c4a6e', bc=badgeColor||(isDark?'#22d3ee':'#0891b2');
+  return (
+    <div className="panel" style={{background:bg,border:`1px solid ${border}`,boxShadow:isDark?'none':'0 1px 5px rgba(8,145,178,.07)'}}>
+      <div className="ph" style={{borderBottom:`1px solid ${border}`}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span style={{fontSize:12.5,fontWeight:600,color:text}}>{title}</span>
+          {badge&&<span style={{padding:'1px 7px',borderRadius:10,fontSize:10,fontWeight:600,letterSpacing:'.04em',background:isDark?'rgba(34,211,238,.1)':'rgba(8,145,178,.08)',color:bc}}>{badge}</span>}
+        </div>
+        {extra}
+      </div>
+      <div className="pb">{children}</div>
+    </div>
+  );
+}
+
+// ── TWEAKS ────────────────────────────────────────────────────────
+function TweaksPanel({ tweaks, setTweaks, isDark }) {
+  const bg=isDark?'#0c1e38':'#fff', border=isDark?'#1e3a5f':'#e0f2fe', muted=isDark?'#94a3b8':'#64748b';
+  const set=(k,v)=>{const n={...tweaks,[k]:v};setTweaks(n);window.parent.postMessage({type:'__edit_mode_set_keys',edits:n},'*');};
+  const btn=(active)=>({flex:1,padding:'5px 0',border:`1px solid ${active?'#0891b2':border}`,borderRadius:4,background:active?(isDark?'rgba(34,211,238,.12)':'rgba(8,145,178,.1)'):'transparent',color:active?'#0891b2':muted,fontSize:11,fontWeight:600,cursor:'pointer'});
+  return (
+    <div style={{position:'fixed',bottom:20,right:20,width:210,background:bg,border:`1px solid ${border}`,borderRadius:10,padding:'14px',boxShadow:isDark?'0 4px 24px rgba(0,0,0,.5)':'0 4px 24px rgba(8,145,178,.15)',zIndex:1000}}>
+      <div style={{fontSize:11,fontWeight:700,letterSpacing:'.08em',color:'#0891b2',textTransform:'uppercase',marginBottom:12}}>Tweaks</div>
+      <div style={{fontSize:11,color:muted,fontWeight:600,marginBottom:5}}>Theme</div>
+      <div style={{display:'flex',gap:5,marginBottom:12}}>
+        {[['light','☀ Light'],['dark','☾ Dark']].map(([v,l])=><button key={v} onClick={()=>set('theme',v)} style={btn(tweaks.theme===v)}>{l}</button>)}
+      </div>
+      <div style={{fontSize:11,color:muted,fontWeight:600,marginBottom:5}}>Chart Style</div>
+      <div style={{display:'flex',gap:5,marginBottom:12}}>
+        {[['lines','Lines'],['area','Areas']].map(([v,l])=><button key={v} onClick={()=>set('chartStyle',v)} style={btn(tweaks.chartStyle===v)}>{l}</button>)}
+      </div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <span style={{fontSize:11,color:muted,fontWeight:600}}>EC₅₀ Line</span>
+        <button onClick={()=>set('showEC50Line',!tweaks.showEC50Line)} style={{width:36,height:20,borderRadius:10,border:'none',cursor:'pointer',background:tweaks.showEC50Line?'#0891b2':(isDark?'#1e3a5f':'#e0f2fe'),position:'relative',transition:'background .2s'}}>
+          <span style={{position:'absolute',top:2,left:tweaks.showEC50Line?18:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── APP ───────────────────────────────────────────────────────────
+function App() {
+  const [params, setParams] = React.useState({r:.9,K:1e9,kmax:2,EC50:2.43,h:1.17,A:5,tmax:48,dt:.2,N0:1e6,schedule:'constant',pulseInterval:12,pulseDuration:2});
+  const [tweaks, setTweaks] = React.useState(TWEAK_DEFAULTS);
+  const [showTweaks, setShowTweaks] = React.useState(false);
+  const [playing, setPlaying] = React.useState(true);
+  const [metricTab, setMetricTab] = React.useState('table');
+  const isDark = tweaks.theme === 'dark';
+
+  React.useEffect(()=>{
+    const h=e=>{
+      if(e.data?.type==='__activate_edit_mode') setShowTweaks(true);
+      if(e.data?.type==='__deactivate_edit_mode') setShowTweaks(false);
+    };
+    window.addEventListener('message',h);
+    window.parent.postMessage({type:'__edit_mode_available'},'*');
+    return()=>window.removeEventListener('message',h);
+  },[]);
+
+  const simMap=React.useMemo(()=>{
+    const concs=[...new Set([...PRESET_CONCS,params.A])];
+    const m={};concs.forEach(A=>{m[`${A} μg/mL`]=runSim({...params,A});});return m;
+  },[params]);
+  const drData=React.useMemo(()=>computeDoseResponse(params,DR_CONCS),[params]);
+  const animSim=React.useMemo(()=>runSim(params),[params]);
+
+  const appBg=isDark?'#080f1e':'#f0f9ff', headBg=isDark?'#0c1e38':'#0c4a6e', border=isDark?'#1e3a5f':'#c0e4f0';
+
+  return (
+    <div style={{height:'100vh',display:'flex',flexDirection:'column',background:appBg}}>
+      <header style={{background:headBg,height:52,padding:'0 18px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,boxShadow:'0 2px 10px rgba(0,0,0,.18)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:11}}>
+          <span style={{fontSize:22}}>🧫</span>
+          <div>
+            <div style={{color:'#fff',fontWeight:600,fontSize:15}}>Bacterial Growth Simulator</div>
+            <div style={{color:'rgba(255,255,255,.45)',fontSize:10,letterSpacing:'.07em',textTransform:'uppercase'}}>ODE · PK/PD · Live Simulation</div>
+          </div>
+        </div>
+        <div style={{display:'flex',gap:7,alignItems:'center'}}>
+          {RUN_DATA.map(r=>(
+            <button key={r.run} onClick={()=>setParams(p=>({...p,...r.params}))}
+              style={{padding:'3px 10px',fontSize:11,fontWeight:600,border:`1px solid ${r.color}`,borderRadius:4,color:r.color,background:'transparent',cursor:'pointer',letterSpacing:'.04em'}}>
+              {r.label}
+            </button>
+          ))}
+          <div style={{width:1,height:18,background:'rgba(255,255,255,.15)',margin:'0 2px'}}/>
+          <button onClick={()=>setPlaying(p=>!p)} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:4,background:'rgba(255,255,255,.08)',border:'none',color:'rgba(255,255,255,.75)',fontSize:11,fontWeight:500,cursor:'pointer'}}>
+            <span>{playing?'⏸':'▶'}</span> Animation
+          </button>
+        </div>
+      </header>
+      <div style={{flex:1,minHeight:0,display:'flex'}}>
+        <Sidebar params={params} setParams={setParams} isDark={isDark}/>
+        <div style={{flex:1,minWidth:0,display:'grid',gridTemplateColumns:'1fr 1fr',gridTemplateRows:'1fr 1fr',gap:8,padding:8}}>
+          <Panel title="Time Course" badge="log₁₀ N vs Time" isDark={isDark}
+            extra={<span style={{fontSize:10.5,color:isDark?'#94a3b8':'#64748b'}}>{params.schedule==='pulse'?`Pulse ${params.pulseInterval}h/${params.pulseDuration}h`:'Constant dosing'}</span>}>
+            <TimeCoursePanel simMap={simMap} params={params} isDark={isDark}/>
+          </Panel>
+          <Panel title="Dose–Response Curve" badge="AUC vs [AB]" isDark={isDark}
+            extra={<span style={{fontSize:11,fontFamily:'IBM Plex Mono',color:'#f59e0b',fontWeight:500}}>EC₅₀ = {params.EC50} μg/mL</span>}>
+            <DoseResponsePanel drData={drData} params={params} isDark={isDark}/>
+          </Panel>
+          <Panel title="Bacterial Animation" badge={playing?'● LIVE':'⏸ PAUSED'} badgeColor={playing?'#10b981':'#f59e0b'} isDark={isDark}
+            extra={<button onClick={()=>setPlaying(p=>!p)} style={{padding:'3px 8px',fontSize:10.5,borderRadius:4,border:`1px solid ${playing?'#ef4444':'#10b981'}`,color:playing?'#ef4444':'#10b981',background:'transparent',fontWeight:600,cursor:'pointer'}}>{playing?'⏸ Pause':'▶ Play'}</button>}>
+            <BacteriaAnimation densities={animSim.densities} times={animSim.times} playing={playing} A={params.A} schedule={params.schedule} theme={tweaks.theme}/>
+          </Panel>
+          <Panel title="Run Comparison" badge="4 Runs" isDark={isDark}
+            extra={<div style={{display:'flex',gap:5}}>{['table','chart'].map(t=><button key={t} onClick={()=>setMetricTab(t)} style={{padding:'2px 8px',fontSize:10,fontWeight:600,letterSpacing:'.04em',textTransform:'uppercase',border:`1px solid ${metricTab===t?'#0891b2':border}`,borderRadius:4,cursor:'pointer',background:metricTab===t?(isDark?'rgba(34,211,238,.1)':'rgba(8,145,178,.08)'):'transparent',color:metricTab===t?'#0891b2':(isDark?'#94a3b8':'#64748b')}}>{t}</button>)}</div>}>
+            {metricTab==='table'
+              ?<MetricsPanel isDark={isDark} onLoad={r=>setParams(p=>({...p,...r}))}/>
+              :<RunComparisonChart isDark={isDark}/>}
+          </Panel>
+        </div>
+      </div>
+      {showTweaks&&<TweaksPanel tweaks={tweaks} setTweaks={setTweaks} isDark={isDark}/>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
